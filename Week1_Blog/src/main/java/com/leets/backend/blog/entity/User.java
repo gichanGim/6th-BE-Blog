@@ -1,6 +1,6 @@
 package com.leets.backend.blog.domain;
 
-import com.leets.backend.blog.DTO.UserCreateRequestDTO;
+import com.leets.backend.blog.dto.request.UserCreateRequestDTO;
 import com.leets.backend.blog.util.StringUtil;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
@@ -72,13 +72,15 @@ public class User {
         return user;
     }
 
-    public void updateUser(String nickname, String email, String password, String introduction, String name, String birthDate){
+    public void updateUser(String nickname, String email, String password, String introduction, String name, String birthDate, String profileImgUrl){
         this.nickname = StringUtil.isNullOrEmpty(nickname) ? this.nickname : nickname;
         this.email = StringUtil.isNullOrEmpty(email) ? this.email : email;
         this.password = StringUtil.isNullOrEmpty(password) ? this.password : password;
         this.name = StringUtil.isNullOrEmpty(name) ? this.name : name;
+        this.introduction = introduction;
         this.birthDate = StringUtil.isNullOrEmpty(birthDate) ? this.birthDate : LocalDateTime.parse(birthDate);;
         this.updateDate = LocalDateTime.now();
+        this.profileImgUrl = StringUtil.isNullOrEmpty(profileImgUrl) ? this.profileImgUrl : profileImgUrl;
     }
 
     public Long getUserId() {

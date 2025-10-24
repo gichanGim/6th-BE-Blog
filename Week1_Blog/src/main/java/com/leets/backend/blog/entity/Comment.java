@@ -1,6 +1,6 @@
 package com.leets.backend.blog.domain;
 
-import com.leets.backend.blog.DTO.CommentRequestDTO;
+import com.leets.backend.blog.dto.request.CommentRequestDTO;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
