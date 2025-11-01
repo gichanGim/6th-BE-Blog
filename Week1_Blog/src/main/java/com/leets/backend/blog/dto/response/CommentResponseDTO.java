@@ -14,7 +14,6 @@ public class CommentResponseDTO {
     private String content;
     private LocalDateTime createDate;
     private LocalDateTime updateDate;
-    @NotBlank
     private String nickname;
     private String profileImgUrl;
     private Boolean isMyComment;
