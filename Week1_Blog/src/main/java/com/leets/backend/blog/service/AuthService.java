@@ -61,7 +61,7 @@ public class AuthService {
         User user = userRepository.findByEmail(request.getEmail()).orElse(null);
 
         if (user == null)
-            return new LoginResponseDTO(false, "가입되지 않은 이메일입니다.", null, null);
+            throw new CustomException(ErrorCode.INVALID_EMAIL);
 
         try {
             // 비밀번호 인증
@@ -70,7 +70,7 @@ public class AuthService {
             );
         } catch (BadCredentialsException e) {
             // 비밀번호 불일치
-            return new LoginResponseDTO(false, "비밀번호가 일치하지 않습니다.", null, null);
+            throw new CustomException(ErrorCode.INVALID_PASSWORD);
         }
 
         String accessToken = jwtTokenProvider.createAccessToken(user.getEmail());
@@ -81,26 +81,26 @@ public class AuthService {
         RefreshToken token = new RefreshToken(refreshToken, user, Instant.now().plus(7, ChronoUnit.DAYS));
         refreshTokenRepository.save(token);
 
-        return new LoginResponseDTO(true, "로그인에 성공하였습니다.", user.getNickname(), new TokenResponseDTO(accessToken, refreshToken));
+        return new LoginResponseDTO(user.getNickname(), new TokenResponseDTO(accessToken, refreshToken));
     }
 
     @Transactional
     public TokenResponseDTO refreshAccessToken(RefreshTokenRequestDTO request) {
         String refreshToken = request.getRefreshToken();
         if (!jwtTokenProvider.validateToken(refreshToken)) {
-            throw new RuntimeException("Invalid refresh token");
+            throw new CustomException(ErrorCode.INVALID_REFRESH_TOKEN);
         }
 
         String username = jwtTokenProvider.getUsername(refreshToken);
 
         User user = userRepository.findByEmail(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
 
         RefreshToken dbToken = refreshTokenRepository.findByToken(refreshToken)
-                .orElseThrow(() -> new RuntimeException("Refresh token not found"));
+                .orElseThrow(() -> new CustomException(ErrorCode.REFRESH_TOKEN_NOT_FOUND));
 
         if (dbToken.getExpiryDate().isBefore(Instant.now())) {
-            throw new RuntimeException("Refresh token expired");
+            throw new CustomException(ErrorCode.REFRESH_TOKEN_EXPIRED);
         }
 
         String newAccessToken = jwtTokenProvider.createAccessToken(username);
@@ -124,6 +124,9 @@ public class AuthService {
             if (userRepository.existsUserByEmail(dto.getEmail()))
                 throw new CustomException(ErrorCode.DUPLICATED_EMAIL);
         }
+
+        if (userRepository.existsUserByNickname(dto.getNickname()))
+            throw new CustomException(ErrorCode.DUPLICATED_NICKNAME);
 
         User newUser = User.createUser(dto, passwordEncoder.encode(dto.getPassword()));
 
