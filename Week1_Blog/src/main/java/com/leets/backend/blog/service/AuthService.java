@@ -1,7 +1,6 @@
 package com.leets.backend.blog.service;
 
 import com.leets.backend.blog.dto.request.LoginRequestDTO;
-import com.leets.backend.blog.dto.request.RefreshTokenRequestDTO;
 import com.leets.backend.blog.dto.request.UserCreateRequestDTO;
 import com.leets.backend.blog.dto.response.LoginResponseDTO;
 import com.leets.backend.blog.dto.response.TokenResponseDTO;
@@ -81,12 +80,11 @@ public class AuthService {
         RefreshToken token = new RefreshToken(refreshToken, user, Instant.now().plus(7, ChronoUnit.DAYS));
         refreshTokenRepository.save(token);
 
-        return new LoginResponseDTO(user.getNickname(), new TokenResponseDTO(accessToken, refreshToken));
+        return new LoginResponseDTO(user.getNickname());
     }
 
     @Transactional
-    public TokenResponseDTO refreshAccessToken(RefreshTokenRequestDTO request) {
-        String refreshToken = request.getRefreshToken();
+    public String refreshAccessToken(String refreshToken) {
         if (!jwtTokenProvider.validateToken(refreshToken)) {
             throw new CustomException(ErrorCode.INVALID_REFRESH_TOKEN);
         }
@@ -103,8 +101,7 @@ public class AuthService {
             throw new CustomException(ErrorCode.REFRESH_TOKEN_EXPIRED);
         }
 
-        String newAccessToken = jwtTokenProvider.createAccessToken(username);
-        return new TokenResponseDTO(newAccessToken, refreshToken);
+        return jwtTokenProvider.createAccessToken(username);
     }
 
     @Transactional

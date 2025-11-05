@@ -1,21 +1,19 @@
 package com.leets.backend.blog.controller;
 
 import com.leets.backend.blog.dto.request.LoginRequestDTO;
-import com.leets.backend.blog.dto.request.RefreshTokenRequestDTO;
 import com.leets.backend.blog.dto.request.UserCreateRequestDTO;
 import com.leets.backend.blog.dto.response.LoginResponseDTO;
-import com.leets.backend.blog.dto.response.TokenResponseDTO;
 import com.leets.backend.blog.dto.response.UserResponseDTO;
+import com.leets.backend.blog.security.JwtTokenProvider;
 import com.leets.backend.blog.service.AuthService;
+import io.micrometer.common.util.StringUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "Auth", description = "회원 인증 및 토큰 refresh 요청")
 @RequestMapping("/auth")
@@ -23,50 +21,52 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService service;
+    private final JwtTokenProvider tokenProvider;
 
-    public AuthController(AuthService service) {
+    public AuthController(AuthService service, JwtTokenProvider tokenProvider) {
         this.service = service;
+        this.tokenProvider = tokenProvider;
     }
 
     @Operation(
             summary = "로그인 인증",
-            description = "로그인 요청, 성공 시 success: true, 닉네임, token반환, 실패 시 success: false"
+            description = "로그인 요청, 성공 시 success: true, 닉네임, access token 반환, refresh token은 HttpOnly 쿠키로 설정"
     )
     @PostMapping("/login")
     public ResponseEntity<LoginResponseDTO> login(@RequestBody @Valid LoginRequestDTO request) {
         LoginResponseDTO response = service.userLogin(request);
 
-        ResponseCookie cookie = ResponseCookie.from("accessToken",
-                        response.getToken() != null ? response.getToken().getAccessToken() : "")
+        String refreshToken = tokenProvider.createRefreshToken(request.getEmail());
+        String accessToken = tokenProvider.createAccessToken(request.getEmail());
+
+        ResponseCookie cookie = ResponseCookie.from("refreshToken", refreshToken)
                 .httpOnly(true)
-                .secure(true)
+                .secure(false) // HTTPS 환경에서만 true
                 .path("/")
-                .maxAge(15 * 60)
+                .maxAge(7 * 24 * 60 * 60) // 7일 (원하는 만료시간으로 조정)
+                .sameSite("Strict")
                 .build();
 
         return ResponseEntity.ok()
-                .header("Set-Cookie", cookie.toString())
+                .header(HttpHeaders.SET_COOKIE, cookie.toString())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
                 .body(response);
     }
 
     @Operation(
             summary = "토큰 리프레쉬",
-            description = "refresh토큰으로 클라이언트에서 access토큰 발급"
+            description = "쿠키의 refresh토큰으로 클라이언트에 새로운 access토큰 발급"
     )
     @PostMapping("/refresh")
-    public ResponseEntity<TokenResponseDTO> refresh(@RequestBody RefreshTokenRequestDTO request) {
-        TokenResponseDTO tokenResponse = service.refreshAccessToken(request);
+    public ResponseEntity<Void> refresh(@CookieValue(value = "refreshToken", required = false) String refreshTokenFromCookie) {
+        if (StringUtils.isEmpty(refreshTokenFromCookie))
+            return ResponseEntity.status(401).build();
 
-        ResponseCookie cookie = ResponseCookie.from("accessToken", tokenResponse.getAccessToken())
-                .httpOnly(true)
-                .secure(true)
-                .path("/")
-                .maxAge(15 * 60) // 15분
-                .build();
+        String newAccessToken = service.refreshAccessToken(refreshTokenFromCookie);
 
         return ResponseEntity.ok()
-                .header("Set-Cookie", cookie.toString())
-                .body(tokenResponse);
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + newAccessToken)
+                .build();
     }
 
     @Operation(
@@ -74,22 +74,23 @@ public class AuthController {
             description = "로그아웃 + refresh 토큰 삭제"
     )
     @PostMapping("/logout")
-        public ResponseEntity<?> logout(@RequestBody RefreshTokenRequestDTO request) {
-        service.logout(request.getRefreshToken());
-
-        // 쿠키 만료
-        ResponseCookie deleteCookie = ResponseCookie.from("accessToken", "")
+    public ResponseEntity<?> logout(@CookieValue(value = "refreshToken", required = false) String refreshTokenFromCookie) {
+        if (!StringUtils.isEmpty(refreshTokenFromCookie)) { // db에 있는 refresh토큰 삭제
+            service.logout(refreshTokenFromCookie);
+        }
+        // refreshToken 쿠키 삭제 (만료)
+        ResponseCookie deleteCookie = ResponseCookie.from("refreshToken", "")
                 .httpOnly(true)
                 .secure(true)
                 .path("/")
-                .maxAge(0) // 만료
+                .maxAge(0)
+                .sameSite("None")   // 프론트 백 다른 도메인이어도 처리
                 .build();
 
         return ResponseEntity.ok()
                 .header("Set-Cookie", deleteCookie.toString())
                 .body("로그아웃 완료");
     }
-
 
     @Operation(
             summary = "신규 회원 생성",

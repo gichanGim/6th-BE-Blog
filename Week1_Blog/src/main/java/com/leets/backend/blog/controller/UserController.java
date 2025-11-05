@@ -1,6 +1,5 @@
 package com.leets.backend.blog.controller;
 
-import com.leets.backend.blog.dto.request.UserCreateRequestDTO;
 import com.leets.backend.blog.dto.request.UserUpdateRequestDTO;
 import com.leets.backend.blog.dto.response.UserResponseDTO;
 import com.leets.backend.blog.service.UserService;
